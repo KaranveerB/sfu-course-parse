@@ -15,6 +15,7 @@ TERM = ("2025", "registration")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dept", required=True)
+parser.add_argument("--campus", default="Burnaby")
 
 
 def get_seating(n, c):
@@ -223,17 +224,20 @@ def get_dept_data(dept):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    dept = args.dept
-    data = get_dept_data(dept)
+    depts = args.dept.split(',')
+    campus = args.campus
 
     def fu(data):
         return [x for x in data if x.schedule]
 
     def fc(data):
-        return [x for x in data if x.schedule[0].campus == "Burnaby"]
+        if campus == "any":
+            return [x for x in data if x.schedule[0].campus in ["Burnaby", "Surrey"]]
+        else:
+            return [x for x in data if x.schedule[0].campus == campus]
 
-    def ft(data):
-        if args.dept == "cmpt":
+    def ft(data, dept):
+        if dept == "cmpt":
             taken = [
                 "105W",
                 "120",
@@ -249,7 +253,7 @@ if __name__ == "__main__":
                 "471",
             ]
             return [x for x in data if x.number not in taken]
-        if args.dept == "psyc":
+        if dept == "psyc":
             taken = ["100", "102"]
             return [x for x in data if x.number not in taken]
         return data
@@ -286,9 +290,11 @@ if __name__ == "__main__":
 
         return [x for x in data if possible(x)]
 
-    courses = ftime(ft(fc(fu(data))))
-    for c in courses:
-        c: Outline
-        c.set_seating()
-        print(c)
-        c.print_prereq()
+    for dept in depts:
+        data = get_dept_data(dept)
+        courses = ftime(ft(fc(fu(data)), dept))
+        for c in courses:
+            c: Outline
+            c.set_seating()
+            print(c)
+            c.print_prereq()
