@@ -4,7 +4,6 @@ import pickle
 import re
 import sys
 from enum import Enum
-import time
 from bs4 import BeautifulSoup as BS
 from typing import List, Type, TypeVar
 
@@ -16,10 +15,12 @@ TERM = ("2025", "registration")
 parser = argparse.ArgumentParser()
 parser.add_argument("--dept", required=True)
 parser.add_argument("--campus", default="Burnaby")
+parser.add_argument("--schedule", required=False)
+parser.add_argument("--extra", required=False)
 
 
 def get_seating(n, c):
-    param = n[:-5].lower().replace(' ', '-')
+    param = n[:-5].lower().replace(" ", "-")
     c = c.lower()
     if "00" in c:
         c = c[0:2]
@@ -52,6 +53,7 @@ def get_seating(n, c):
         print("couldn't match ", field)
         sys.exit()
 
+
 def seating_to_str(i, m, w):
     if w != 0:
         if i < 0.9 * m:
@@ -64,8 +66,10 @@ def seating_to_str(i, m, w):
     else:
         return f"\033[32m{i}/{m}\033[0m"
 
+
 def seat_str(n, c):
     return seating_to_str(*get_seating(n, c))
+
 
 class D(Enum):
     M = "Mo"
@@ -124,7 +128,7 @@ class Outline:
         self.s_in = None
         self.s_out = None
         self.s_wait = None
-    
+
     def set_seating(self):
         s_in, s_out, s_wait = get_seating(c.name, c.section)
         self.s_in = s_in
@@ -143,7 +147,6 @@ class Outline:
             return print(f"\t\tPrereq: {self.prereq}")
         else:
             return print("\t\tPrereq: None")
-
 
     def __str__(self) -> str:
         return f"{self.seat_str()}\033[1;35m{self.name}\033[0m {self.title}"
@@ -222,6 +225,69 @@ def get_dept_data(dept):
     return dept_data
 
 
+class TimeConstraints:
+    class Constraint:
+        def __init__(self, pos: bool, day: D, start: int, end: int):
+            self.pos = pos
+            self.day = day
+            self.start = start
+            self.end = end
+
+    @staticmethod
+    def time_to_minutes(time_str: str) -> int:
+        s = time_str.split(":")
+        return 60 * int(s[0]) + int(s[1])
+
+    @staticmethod
+    def constraint_from_str(s) -> Constraint:
+        """
+        Examples:
+        "-Mu10:30-13:30",
+        "+Tu9:00-10:00"
+        """
+        pos = s[0] == "+"
+        day = D(s[1:3])
+        times = s[3:].split("-")
+        start = TimeConstraints.time_to_minutes(times[0])
+        end = TimeConstraints.time_to_minutes(times[1])
+        return TimeConstraints.Constraint(pos, day, start, end)
+
+    def add_constraint(self, constraint: Constraint):
+        self.constraints.append(constraint)
+        """
+        if constraint.pos:
+            self.pos_constraints.append(constraint)
+        else:
+            self.neg_constraints.append(constraint)
+        """
+
+    def __init__(self, schedule_file: str | None, extra: str | None) -> None:
+        self.constraints = []
+        if schedule_file:
+            with open(schedule_file, "r") as schedule:
+                for constraint_str in schedule:
+                    constraint_str = constraint_str.strip()
+                    if constraint_str:
+                        self.add_constraint(self.constraint_from_str(constraint_str))
+        if extra:
+            self.add_constraint(self.constraint_from_str(extra))
+
+    @staticmethod
+    def is_not_constrained(
+        days: str, start: int, end: int, constraint: Constraint
+    ) -> bool:
+        if constraint.day.s() in days:
+            time_conflict = start < constraint.end and end > constraint.start
+            return constraint.pos == time_conflict
+        return True
+
+    def satisfies_constraints(self, days: str, start: int, end: int) -> bool:
+        return all(
+            self.is_not_constrained(days, start, end, constraint)
+            for constraint in self.constraints
+        )
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
     depts = args.dept.split(',')
@@ -259,36 +325,24 @@ if __name__ == "__main__":
         return data
 
     def ftime(data):
-        def ic(s1, s2, e1, e2):
-            return not (e1 < s2 or e2 < s1)
-
         def t2m(s):
             s = s.split(":")
             return 60 * int(s[0]) + int(s[1])
 
-        def tc(s: Schedule):
-            d = s.days
-            if D.M.s() in d or D.W.s() in d or D.F.s() in d:
-                if ic(t2m("9:30"), t2m(s.startTime), t2m("10:20"), t2m(s.endTime)):
-                    return True
-            if D.TU.s() in d:
-                if ic(t2m("11:30"), t2m(s.startTime), t2m("13:20"), t2m(s.endTime)):
-                    return True
-            if D.TH.s() in d:
-                if ic(t2m("11:30"), t2m(s.startTime), t2m("12:20"), t2m(s.endTime)):
-                    return True
-            if D.F.s() in d:
-                if ic(t2m("14:30"), t2m(s.startTime), t2m("17:20"), t2m(s.endTime)):
-                    return True
-            return False
-
-        def possible(c):
-            for s in c.schedule:
-                if tc(s):
-                    return False
+        def possible(course: Outline, constraints: TimeConstraints):
+            assert course.schedule
+            for s in course.schedule:
+                # not all schedules have times. idk why
+                if s.startTime:
+                    start = t2m(s.startTime)
+                    end = t2m(s.endTime)
+                    if not constraints.satisfies_constraints(s.days, start, end):
+                        return False
             return True
 
-        return [x for x in data if possible(x)]
+
+        constraints = TimeConstraints(args.schedule, args.extra)
+        return [x for x in data if possible(x, constraints)]
 
     for dept in depts:
         data = get_dept_data(dept)
