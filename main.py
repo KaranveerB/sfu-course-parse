@@ -17,6 +17,7 @@ parser.add_argument("--dept", required=True)
 parser.add_argument("--campus", default="Burnaby")
 parser.add_argument("--schedule", required=False)
 parser.add_argument("--extra", required=False)
+parser.add_argument("--day", required=False)
 
 
 def get_seating(n, c):
@@ -292,6 +293,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     depts = args.dept.split(',')
     campus = args.campus
+    day = args.day
 
     def fu(data):
         return [x for x in data if x.schedule]
@@ -324,6 +326,12 @@ if __name__ == "__main__":
             return [x for x in data if x.number not in taken]
         return data
 
+    def fd(data):
+        if not day:
+            return data
+        else:
+            return [x for x in data if any([s for s in x.schedule if day in s.days])]
+
     def ftime(data):
         def t2m(s):
             s = s.split(":")
@@ -346,7 +354,7 @@ if __name__ == "__main__":
 
     for dept in depts:
         data = get_dept_data(dept)
-        courses = ftime(ft(fc(fu(data)), dept))
+        courses = ftime(ft(fd(fc(fu(data))), dept))
         for c in courses:
             c: Outline
             c.set_seating()
