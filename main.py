@@ -150,7 +150,7 @@ class Outline:
             return print("\t\tPrereq: None")
 
     def __str__(self) -> str:
-        return f"{self.seat_str()}\033[1;35m{self.name}\033[0m {self.title}"
+        return f"{self.seat_str()}\033[1;35m{self.name}\033[0m {self.title}" + "\n".ljust(17) + f"https://www.sfu.ca/outlines.html?{self.outline_path}"
 
     __repr__ = __str__
 
