@@ -18,6 +18,8 @@ parser.add_argument("--campus", default="Burnaby")
 parser.add_argument("--schedule", required=False)
 parser.add_argument("--extra", required=False)
 parser.add_argument("--day", required=False)
+parser.add_argument("--seats", required=False)
+parser.add_argument("--waitlist", required=False)
 
 
 def get_seating(n, c):
@@ -105,6 +107,11 @@ class Schedule:
         self.startTime = data.get("startTime", None)
         self.endTime = data.get("endTime", None)
 
+    def __str__(self):
+        return f"{self.days}: {self.startTime}-{self.endTime}"
+    
+    __repr__ = __str__
+
 
 class Outline:
     def __init__(self, data):
@@ -150,7 +157,7 @@ class Outline:
             return print("\t\tPrereq: None")
 
     def __str__(self) -> str:
-        return f"{self.seat_str()}\033[1;35m{self.name}\033[0m {self.title}" + "\n".ljust(17) + f"https://www.sfu.ca/outlines.html?{self.outline_path}"
+        return f"{self.seat_str()}\033[1;35m{self.name}\033[0m {self.title}" + "\n".ljust(17) + f"https://www.sfu.ca/outlines.html?{self.outline_path}" + "\n".ljust(21) + str(self.schedule)
 
     __repr__ = __str__
 
@@ -358,5 +365,6 @@ if __name__ == "__main__":
         for c in courses:
             c: Outline
             c.set_seating()
-            print(c)
-            c.print_prereq()
+            if (not args.seats or c.s_out - c.s_in >= int(args.seats)) and (not args.waitlist or c.s_wait <= int(args.waitlist)):
+                print(c)
+                c.print_prereq()
